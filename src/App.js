@@ -1,107 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
-import { FaExchangeAlt, FaGlobeAsia, FaSpinner, FaVolumeUp, FaUser, FaClock, FaHistory } from 'react-icons/fa';
+import { FaPaperPlane, FaGlobeAsia, FaSpinner, FaVolumeUp, FaUser, FaRobot, FaTrash } from 'react-icons/fa';
 
 // API base URL - change this to your Flask backend URL
 const API_URL = 'http://localhost:5000/api';
 
 function App() {
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      type: 'bot',
+      text: 'నమస్కారం! నేను మీ తెలుగు AI సహాయకుడను. దయచేసి ఆంగ్లంలో మీ ప్రశ్న అడగండి, నేను తెలుగులో సహజంగా సమాధానం ఇస్తాను.',
+      englishText: 'Hello! I am your Telugu AI assistant. Please ask your question in English, and I will respond naturally in Telugu.',
+      timestamp: new Date().toISOString()
+    }
+  ]);
   const [inputText, setInputText] = useState('');
-  const [translatedText, setTranslatedText] = useState('');
-  const [sourceLang, setSourceLang] = useState('English');
-  const [targetLang, setTargetLang] = useState('Hindi');
-  const [languages, setLanguages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [error, setError] = useState('');
-  const [charCount, setCharCount] = useState(0);
-  const [showCopiedMessage, setShowCopiedMessage] = useState(false);
-  const [currentDateTime, setCurrentDateTime] = useState('');
-  const [currentUser, setCurrentUser] = useState('');
-  const [translationHistory, setTranslationHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const messagesEndRef = useRef(null);
 
-  // Fetch supported languages and system info on component mount
+  // Auto scroll to bottom when new messages are added
   useEffect(() => {
-    const fetchLanguages = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/languages`);
-        if (response.data.success) {
-          setLanguages(response.data.languages);
-        }
-      } catch (err) {
-        setError('Failed to fetch supported languages');
-        console.error(err);
-      }
-    };
+    scrollToBottom();
+  }, [messages]);
 
-    const fetchSystemInfo = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/system-info`);
-        if (response.data.success) {
-          setCurrentDateTime(response.data.timestamp);
-          setCurrentUser(response.data.user);
-        }
-      } catch (err) {
-        console.error('Failed to fetch system info:', err);
-      }
-    };
-
-    fetchLanguages();
-    fetchSystemInfo();
-
-    // Update time every minute
-    const intervalId = setInterval(() => {
-      const now = new Date();
-      setCurrentDateTime(now.toISOString().replace('T', ' ').substring(0, 19));
-    }, 60000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  // Initialize with current date time
-  
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const handleInputChange = (e) => {
-    const text = e.target.value;
-    setInputText(text);
-    setCharCount(text.length);
+    setInputText(e.target.value);
   };
 
-  const swapLanguages = () => {
-    if (!translatedText) return;
-    
-    setSourceLang(targetLang);
-    setTargetLang(sourceLang);
-    setInputText(translatedText);
-    setTranslatedText('');
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
-  const copyToClipboard = () => {
-    if (!translatedText) return;
-    
-    navigator.clipboard.writeText(translatedText);
-    setShowCopiedMessage(true);
-    setTimeout(() => setShowCopiedMessage(false), 2000);
+  const clearChat = () => {
+    setMessages([
+      {
+        id: 1,
+        type: 'bot',
+        text: 'నమస్కారం! నేను మీ తెలుగు AI సహాయకుడను. దయచేసి ఆంగ్లంలో మీ ప్రశ్న అడగండి, నేను తెలుగులో సహజంగా సమాధానం ఇస్తాను.',
+        englishText: 'Hello! I am your Telugu AI assistant. Please ask your question in English, and I will respond naturally in Telugu.',
+        timestamp: new Date().toISOString()
+      }
+    ]);
   };
 
-  const clearAll = () => {
-    setInputText('');
-    setTranslatedText('');
-    setCharCount(0);
-    setError('');
-  };
-
-  const speakText = async () => {
-    if (!translatedText) return;
-    
+  const speakText = async (text) => {
     setIsSpeaking(true);
     
     try {
       const response = await axios.post(`${API_URL}/text-to-speech`, {
-        text: translatedText,
-        languageCode: SUPPORTED_LANGUAGES[targetLang]
+        text: text,
+        languageCode: 'te-IN' // Telugu language code
       });
       
       if (response.data.success && response.data.audio_data) {
@@ -109,7 +67,7 @@ function App() {
         const audio = new Audio(`data:audio/wav;base64,${response.data.audio_data}`);
         audio.onended = () => setIsSpeaking(false);
         audio.onerror = () => {
-          setError('Failed to play audio');
+          console.error('Failed to play audio');
           setIsSpeaking(false);
         };
         audio.play();
@@ -117,66 +75,64 @@ function App() {
         throw new Error(response.data.message || 'Failed to generate speech');
       }
     } catch (err) {
-      setError(`Text-to-speech error: ${err.message}`);
+      console.error(`Text-to-speech error: ${err.message}`);
       setIsSpeaking(false);
     }
   };
 
-  const toggleHistory = () => {
-    setShowHistory(!showHistory);
-  };
+  const handleSendMessage = async () => {
+    if (!inputText.trim()) return;
 
-  const selectFromHistory = (item) => {
-    setInputText(item.originalText);
-    setTranslatedText(item.translatedText);
-    setSourceLang(item.sourceLang);
-    setTargetLang(item.targetLang);
-    setShowHistory(false);
-  };
+    const userMessage = {
+      id: Date.now(),
+      type: 'user',
+      text: inputText.trim(),
+      timestamp: new Date().toISOString()
+    };
 
-  const handleTranslate = async () => {
-    if (!inputText.trim()) {
-      setError('Please enter some text to translate');
-      return;
-    }
-
-    if (sourceLang === targetLang) {
-      setError('Source and target languages are the same');
-      return;
-    }
-
-    setError('');
+    // Add user message to chat
+    setMessages(prev => [...prev, userMessage]);
+    
+    const currentInput = inputText.trim();
+    setInputText('');
     setIsLoading(true);
 
     try {
-      const response = await axios.post(`${API_URL}/translate`, {
-        text: inputText,
-        sourceLang,
-        targetLang
+      const response = await axios.post(`${API_URL}/chat`, {
+        question: currentInput
       });
 
       if (response.data.success) {
-        setTranslatedText(response.data.translated_text);
-        setCurrentDateTime(response.data.timestamp || currentDateTime);
-        setCurrentUser(response.data.user || currentUser);
+        const botMessage = {
+          id: Date.now() + 1,
+          type: 'bot',
+          text: response.data.telugu_response,
+          englishText: currentInput,
+          timestamp: new Date().toISOString()
+        };
         
-        // Add to translation history
-        setTranslationHistory(prev => [
-          {
-            id: Date.now(),
-            originalText: inputText,
-            translatedText: response.data.translated_text,
-            sourceLang,
-            targetLang,
-            timestamp: response.data.timestamp || new Date().toISOString()
-          },
-          ...prev.slice(0, 9) // Keep only 10 most recent translations
-        ]);
+        setMessages(prev => [...prev, botMessage]);
       } else {
-        setError(response.data.message || 'Translation failed');
+        const errorMessage = {
+          id: Date.now() + 1,
+          type: 'bot',
+          text: 'క్షమించండి, సమాధానం ఇవ్వడంలో లోపం ఉంది. దయచేసి మళ్లీ ప్రయత్నించండి.',
+          englishText: 'Sorry, there was an error generating response. Please try again.',
+          timestamp: new Date().toISOString(),
+          isError: true
+        };
+        setMessages(prev => [...prev, errorMessage]);
       }
     } catch (err) {
-      setError('Error connecting to the translation service');
+      const errorMessage = {
+        id: Date.now() + 1,
+        type: 'bot',
+        text: 'AI సేవతో కనెక్షన్ లోపం. దయచేసి మళ్లీ ప్రయత్నించండి.',
+        englishText: 'Connection error with AI service. Please try again.',
+        timestamp: new Date().toISOString(),
+        isError: true
+      };
+      setMessages(prev => [...prev, errorMessage]);
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -184,186 +140,106 @@ function App() {
   };
 
   return (
-    <div className="app">
-      <div className="background-animation"></div>
-      
-      <header className="header">
-        <div className="logo">
-          <FaGlobeAsia className="logo-icon" />
-          <h1>Bharat Bhasha Translator</h1>
-        </div>
-        <p className="subtitle">Bridging language barriers across India</p>
-        
-        <div className="system-info">
-          <div className="info-item">
-            <FaClock /> <span>{currentDateTime}</span>
+    <div className="chat-app">
+      {/* Header */}
+      <header className="chat-header">
+        <div className="header-content">
+          <div className="logo">
+            <FaGlobeAsia className="logo-icon" />
+            <div>
+              <h1>Telugu AI Assistant</h1>
+              <span className="subtitle">Ask in English • Get Telugu Responses</span>
+            </div>
           </div>
-          <div className="info-item">
-            <FaUser /> <span>{currentUser}</span>
-          </div>
+          <button className="clear-chat-btn" onClick={clearChat} title="Clear chat">
+            <FaTrash />
+          </button>
         </div>
       </header>
 
-      <main className="container">
-        <div className="translator-card">
-          <div className="card-header">
-            <h2>Language Translator</h2>
-            <button className="history-button" onClick={toggleHistory} title="Translation History">
-              <FaHistory />
-            </button>
-          </div>
+      {/* Chat Messages */}
+      <main className="chat-messages">
+        <div className="messages-container">
+          {messages.map(message => (
+            <div key={message.id} className={`message ${message.type}-message`}>
+              <div className="message-avatar">
+                {message.type === 'user' ? <FaUser /> : <FaRobot />}
+              </div>
+              <div className="message-content">
+                <div className={`message-bubble ${message.isError ? 'error' : ''}`}>
+                  <div className="message-text">{message.text}</div>
+                  {message.englishText && message.type === 'bot' && (
+                    <div className="english-text">English: {message.englishText}</div>
+                  )}
+                  <div className="message-actions">
+                    <span className="message-time">
+                      {new Date(message.timestamp).toLocaleTimeString()}
+                    </span>
+                    {message.type === 'bot' && !message.isError && (
+                      <button
+                        className={`speak-btn ${isSpeaking ? 'speaking' : ''}`}
+                        onClick={() => speakText(message.text)}
+                        disabled={isSpeaking}
+                        title="Listen to Telugu text"
+                      >
+                        <FaVolumeUp />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
           
-          {showHistory && (
-            <div className="history-panel">
-              <h3>Recent Translations</h3>
-              {translationHistory.length > 0 ? (
-                <ul className="history-list">
-                  {translationHistory.map(item => (
-                    <li key={item.id} onClick={() => selectFromHistory(item)}>
-                      <div className="history-item">
-                        <div className="history-text">{item.originalText.substring(0, 30)}{item.originalText.length > 30 ? '...' : ''}</div>
-                        <div className="history-langs">{item.sourceLang} → {item.targetLang}</div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="empty-history">No translation history yet</p>
-              )}
+          {isLoading && (
+            <div className="message bot-message">
+              <div className="message-avatar">
+                <FaRobot />
+              </div>
+              <div className="message-content">
+                <div className="message-bubble typing">
+                  <div className="typing-indicator">
+                    <FaSpinner className="spinner" />
+                    <span>Thinking in Telugu...</span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
-
-          <div className="language-controls">
-            <div className="language-selector">
-              <label>From</label>
-              <select 
-                value={sourceLang} 
-                onChange={(e) => setSourceLang(e.target.value)}
-                className="language-dropdown"
-              >
-                {languages.map(lang => (
-                  <option key={`source-${lang}`} value={lang}>{lang}</option>
-                ))}
-              </select>
-            </div>
-            
-            <button className="swap-button" onClick={swapLanguages} title="Swap languages">
-              <FaExchangeAlt />
-            </button>
-            
-            <div className="language-selector">
-              <label>To</label>
-              <select 
-                value={targetLang} 
-                onChange={(e) => setTargetLang(e.target.value)}
-                className="language-dropdown"
-              >
-                {languages.map(lang => (
-                  <option key={`target-${lang}`} value={lang}>{lang}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="translation-area">
-            <div className="text-panel">
-              <textarea
-                className="text-input"
-                value={inputText}
-                onChange={handleInputChange}
-                placeholder="Type your text here..."
-                maxLength={5000}
-              />
-              <div className="text-actions">
-                <span className="char-count">{charCount}/5000</span>
-                <button className="action-button" onClick={clearAll}>Clear</button>
-              </div>
-            </div>
-
-            <div className="text-panel">
-              <div className={`text-output ${translatedText ? 'has-content' : ''}`}>
-                {translatedText ? translatedText : 'Translation will appear here...'}
-              </div>
-              <div className="text-actions">
-                {translatedText && (
-                  <>
-                    <button 
-                      className={`action-button speak-button ${isSpeaking ? 'speaking' : ''}`} 
-                      onClick={speakText}
-                      disabled={isSpeaking}
-                    >
-                      <FaVolumeUp /> {isSpeaking ? 'Playing...' : 'Listen'}
-                    </button>
-                    <button className="action-button copy-button" onClick={copyToClipboard}>
-                      {showCopiedMessage ? 'Copied!' : 'Copy'}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {error && <div className="error-message">{error}</div>}
-
-          <button 
-            className="translate-button" 
-            onClick={handleTranslate}
-            disabled={isLoading || !inputText.trim()}
-          >
-            {isLoading ? (
-              <>
-                <FaSpinner className="spinner" /> Translating...
-              </>
-            ) : (
-              'Translate Now'
-            )}
-          </button>
-        </div>
-
-        <div className="features-section">
-          <h2>Features</h2>
-          <div className="features-grid">
-            <div className="feature-card">
-              <div className="feature-icon">🔄</div>
-              <h3>10+ Indian Languages</h3>
-              <p>Translate between English and major Indian languages including Hindi, Tamil, Telugu, and more.</p>
-            </div>
-            <div className="feature-card">
-              <div className="feature-icon">⚡</div>
-              <h3>Fast Translation</h3>
-              <p>Powered by Sarvam AI's advanced neural machine translation technology.</p>
-            </div>
-            <div className="feature-card">
-              <div className="feature-icon">🔊</div>
-              <h3>Text-to-Speech</h3>
-              <p>Listen to your translations with natural-sounding voice output.</p>
-            </div>
-          </div>
+          
+          <div ref={messagesEndRef} />
         </div>
       </main>
 
-      <footer className="footer">
-        <div className="footer-content">
-          <p>© {new Date().getFullYear()} Bharat Bhasha Translator</p>
-          <p>Powered by <a href="https://sarvam.ai" target="_blank" rel="noopener noreferrer">Sarvam AI</a></p>
+      {/* Input Area */}
+      <footer className="chat-input-area">
+        <div className="input-container">
+          <div className="input-wrapper">
+            <textarea
+              value={inputText}
+              onChange={handleInputChange}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask your question in English..."
+              className="chat-input"
+              rows={1}
+              disabled={isLoading}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputText.trim() || isLoading}
+              className="send-btn"
+              title="Send message"
+            >
+              <FaPaperPlane />
+            </button>
+          </div>
+          <div className="input-hint">
+            Press Enter to send • Ask questions in English for Telugu responses
+          </div>
         </div>
       </footer>
     </div>
   );
 }
-
-// Language code mapping (same as backend)
-const SUPPORTED_LANGUAGES = {
-  "English": "en-IN",
-  "Hindi": "hi-IN",
-  "Tamil": "ta-IN",
-  "Telugu": "te-IN",
-  "Kannada": "kn-IN",
-  "Malayalam": "ml-IN",
-  "Bengali": "bn-IN",
-  "Marathi": "mr-IN",
-  "Gujarati": "gu-IN",
-  "Punjabi": "pa-IN"
-};
 
 export default App;
