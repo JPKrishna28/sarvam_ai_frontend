@@ -7,6 +7,7 @@ import { FaPaperPlane, FaGlobeAsia, FaSpinner, FaVolumeUp, FaUser, FaRobot, FaTr
 const API_URL = 'http://localhost:5000/api';
 
 function App() {
+  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -99,7 +100,8 @@ function App() {
 
     try {
       const response = await axios.post(`${API_URL}/chat`, {
-        question: currentInput
+        question: currentInput,
+        session_id: sessionId
       });
 
       if (response.data.success) {
@@ -116,7 +118,7 @@ function App() {
         const errorMessage = {
           id: Date.now() + 1,
           type: 'bot',
-          text: 'క్షమించండి, సమాధానం ఇవ్వడంలో లోపం ఉంది. దయచేసి మళ్లీ ప్రయత్నించండి.',
+          text: response.data.telugu_response || 'క్షమించండి, సమాధానం ఇవ్వడంలో లోపం ఉంది. దయచేసి మళ్లీ ప్రయత్నించండి.',
           englishText: 'Sorry, there was an error generating response. Please try again.',
           timestamp: new Date().toISOString(),
           isError: true
